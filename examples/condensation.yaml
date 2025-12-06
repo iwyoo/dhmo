@@ -1,0 +1,17 @@
+reaction:
+  name: Ester Condensation
+  description: "알코올과 카복실산이 반응하여 에스터와 물을 생성하는 축합 반응"
+  inputs:
+    alcohol:
+      - "*O"
+      - "1_"
+    acetic acid:
+      - "*(=O)O"
+      - "2_____"
+  outputs:
+    ester:
+      - "*(=O)*"
+      - "1____2"
+    water:
+      - "O"
+      - "_"
