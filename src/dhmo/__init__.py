@@ -11,6 +11,6 @@ _CONDITION_KEY = "conditions"
 
 
 def load(path):
-    with open("config.yaml", "r", encoding="utf-8") as f:
+    with open(path, "r", encoding="utf-8") as f:
         data = yaml.safe_load(f)
     return Reaction(**data)

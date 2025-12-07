@@ -1,4 +1,5 @@
 from rdkit import Chem
+from rdkit.Chem import AllChem
 
 from typing import Any, Dict
 
@@ -135,17 +136,21 @@ class Reaction:
             list of str: Output molecule SMILES list.
         """
 
-        rxn = Chem.ReactionFromSmarts(self.smarts)
-        input_mols = [Chem.MolFromSmiles(smi) for smi in inputs]
+        rxn = AllChem.ReactionFromSmarts(self.smarts)
+        try:
+            input_mols = [Chem.MolFromSmiles(smi) for smi in inputs]
+        except Exception as e:
+            raise ValueError(f"Error parsing input SMILES: {e}")
+
         if any(mol is None for mol in input_mols):
             raise ValueError("One or more input SMILES are invalid.")
 
-        products_sets = rxn.RunReactants(tuple(input_mols))
-        output_smiles = []
+        products_sets = rxn.RunReactants(input_mols)
+        outputs = []
         for products in products_sets:
             output_combination = []
             for product in products:
                 smi = Chem.MolToSmiles(product, isomericSmiles=True)
                 output_combination.append(smi)
-            output_smiles.append(".".join(output_combination))
-        return list(output_smiles)
+            outputs.append(".".join(output_combination))
+        return outputs
