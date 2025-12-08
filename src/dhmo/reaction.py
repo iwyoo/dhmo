@@ -95,7 +95,7 @@ class Reaction:
         Returns:
             str: SMARTS string with atom mapping (e.g., "[C:1](=[O:2])O")
         """
-        mol = Chem.MolFromSmiles(pattern)
+        mol = Chem.MolFromSmarts(pattern)
         if mol is None:
             raise ValueError(f"Invalid SMILES pattern: {pattern}")
         
