@@ -55,7 +55,7 @@ class Reaction:
                     f"Mapping for member '{member}' must contain only digits or underscores, got: {repr(mapping)}"
                 )
 
-            smarts = self._convert_smiles_to_smarts(pattern, mapping)
+            smarts = self._apply_atom_mapping_by_symbol(pattern, mapping)
             preprocessed_members[member] = smarts
         return preprocessed_members
 
@@ -83,14 +83,14 @@ class Reaction:
         reaction_smarts = f"{input_smarts}>>{output_smarts}"
         return reaction_smarts
 
-    def _convert_smiles_to_smarts(self, pattern: str, mapping: str) -> str:
+    def _apply_atom_mapping_by_symbol(self, pattern: str, mapping: str) -> str:
         """
         Convert a SMILES pattern and atom mapping to a SMARTS string with atom mapping.
         For example, given the SMILES pattern "C(=O)O" and mapping "1__2__",
         the function returns "[C:1](=[O:2])O". 
 
         Args:
-            pattern (str): SMILES pattern (e.g., "C(=O)O")
+            pattern (str): SMARTS pattern (e.g., "C(=O)O")
             mapping (str): Atom mapping string (e.g., "1__2__")
         Returns:
             str: SMARTS string with atom mapping (e.g., "[C:1](=[O:2])O")
@@ -99,15 +99,13 @@ class Reaction:
         if mol is None:
             raise ValueError(f"Invalid SMILES pattern: {pattern}")
         
-        # Assign each atom its mapping number
         pattern_lower = pattern.lower()
+        atom_pos2index = {}
         i = 0
-        for atom in mol.GetAtoms():
+        for atom_idx, atom in enumerate(mol.GetAtoms()):
             symbol = atom.GetSymbol()
-
-            # Find the corresponding position in the pattern
-            index = pattern.find(symbol, i)
-            if index == -1 or index >= len(mapping):
+            i = pattern_lower.find(symbol.lower(), i)
+            if i == -1 or i >= len(mapping):
                 raise ValueError(
                     f"Mapping does not match pattern for atom '{symbol}' in pattern '{pattern}' with mapping '{mapping}'"
                 )
@@ -116,12 +114,24 @@ class Reaction:
                 raise ValueError(
                     f"Second character of atom symbol '{symbol}' in pattern '{pattern}' must be followed by an underscore in mapping"
                 )
-
-            if mapping[index] == "_":
-                atom.SetAtomMapNum(0)
-            else:
-                atom.SetAtomMapNum(int(mapping[index]))
+            atom_pos2index[i] = atom_idx
             i += 1
+
+        map_num2pos = {num: pos for pos, num in enumerate(mapping) if num != "_"}
+
+        if len(map_num2pos) > len(atom_pos2index):
+            raise ValueError(
+                f"More mapped atoms in mapping '{mapping}' than atoms in pattern '{pattern}'"
+            )
+        
+        for num, pos in map_num2pos.items():
+            atom_idx = atom_pos2index.get(pos)
+            if atom_idx is None:
+                raise ValueError(
+                    f"No atom found at position {pos} in pattern '{pattern}' for mapping '{mapping}'"
+                )
+            atom = mol.GetAtomWithIdx(atom_idx)
+            atom.SetAtomMapNum(int(num))
 
         smarts = Chem.MolToSmarts(mol)
         return smarts
@@ -144,7 +154,6 @@ class Reaction:
 
         if any(mol is None for mol in input_mols):
             raise ValueError("One or more input SMILES are invalid.")
-
         products_sets = rxn.RunReactants(input_mols)
         outputs = []
         for products in products_sets:
