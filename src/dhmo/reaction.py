@@ -1,7 +1,8 @@
+from itertools import product
+from typing import Any, Dict
+
 from rdkit import Chem
 from rdkit.Chem import AllChem
-
-from typing import Any, Dict
 
 
 class Reaction:
@@ -18,7 +19,7 @@ class Reaction:
         self.description = description
         self.input_smarts_map = self._preprocess_reaction_members(inputs)
         self.output_smarts_map = self._preprocess_reaction_members(outputs)
-        self.smarts = self._preprocess_smarts(
+        self.rxn_smarts = self._preprocess_smarts(
             self.input_smarts_map,
             self.output_smarts_map,
         )
@@ -136,7 +137,26 @@ class Reaction:
         smarts = Chem.MolToSmarts(mol)
         return smarts
 
-    def run(self, inputs: list[str]):
+    def _generate_reactant_combinations(self, input_mols: list) -> list:
+        """
+        Generate all possible combinations of reactant molecules for the reaction.
+        Args:
+            input_mols (list of rdkit.Chem.Mol): List of input molecule objects.
+        Returns:
+            list of tuple: List of tuples, each containing a combination of reactant molecules.
+        """
+        possible_mol_lists = []
+        for input_smarts in self.input_smarts_map.values():
+            possible_input_smarts = []
+            pattern_mol = Chem.MolFromSmarts(input_smarts)
+            for mol in input_mols:
+                if mol.HasSubstructMatch(pattern_mol):
+                    possible_input_smarts.append(mol)
+            possible_mol_lists.append(possible_input_smarts)
+        combinations = list(product(*possible_mol_lists))
+        return combinations
+
+    def run_ordered(self, inputs: list[str]):
         """
         Run the reaction on the given input molecules.
 
@@ -145,8 +165,7 @@ class Reaction:
         Returns:
             list of str: Output molecule SMILES list.
         """
-
-        rxn = AllChem.ReactionFromSmarts(self.smarts)
+        rxn = AllChem.ReactionFromSmarts(self.rxn_smarts)
         try:
             input_mols = [Chem.MolFromSmiles(smi) for smi in inputs]
         except Exception as e:
@@ -162,4 +181,35 @@ class Reaction:
                 smi = Chem.MolToSmiles(product, isomericSmiles=True)
                 output_combination.append(smi)
             outputs.append(".".join(output_combination))
+        return outputs
+
+    def run(self, inputs: list[str]):
+        """
+        Run the reaction on the given input molecules with all input combinations
+        Args:
+            inputs (list of str): Input molecule SMILES list.
+        Returns:
+            list of str: Output molecule SMILES list.
+        """
+        rxn = AllChem.ReactionFromSmarts(self.rxn_smarts)
+        try:
+            input_mols = [Chem.MolFromSmiles(smi) for smi in inputs]
+        except Exception as e:
+            raise ValueError(f"Error parsing input SMILES: {e}")
+
+        if any(mol is None for mol in input_mols):
+            raise ValueError("One or more input SMILES are invalid.")
+        
+        outputs = []
+
+        # Generate all combinations of input molecules
+        combinations = self._generate_reactant_combinations(input_mols)
+        for mol_combination in combinations:
+            products_sets = rxn.RunReactants(mol_combination)
+            for products in products_sets:
+                output_combination = []
+                for product in products:
+                    smi = Chem.MolToSmiles(product, isomericSmiles=True)
+                    output_combination.append(smi)
+                outputs.append(".".join(output_combination))
         return outputs
