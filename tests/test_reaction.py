@@ -17,7 +17,12 @@ def test_dehydration_reaction():
     print(f"Input SMILES list: {input_smiles}")
     print(f"Output SMILES list: {output_smiles}")
 
+    # Reverse reaction test
     input_smiles = ["CC(=O)O", "CCO"]
     output_smiles = reaction.run(input_smiles)
     print(f"Input SMILES list: {input_smiles}")
     print(f"Output SMILES list: {output_smiles}")
+
+    output_smiles = reaction.run_ordered(input_smiles)
+    if len(output_smiles) > 0:
+        raise AssertionError("Expected no products for ordered reaction with given inputs.")

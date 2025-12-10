@@ -23,6 +23,7 @@ class Reaction:
             self.input_smarts_map,
             self.output_smarts_map,
         )
+        self.rxn = AllChem.ReactionFromSmarts(self.rxn_smarts)
 
     def _preprocess_reaction_members(self, members: Dict[str, list]) -> Dict[str, str]:
         preprocessed_members = {}
@@ -191,7 +192,11 @@ class Reaction:
         Returns:
             list of str: Output molecule SMILES list.
         """
-        rxn = AllChem.ReactionFromSmarts(self.rxn_smarts)
+        self.rxn.Initialize()
+
+        # Remove duplicate inputs
+        inputs = list(set(inputs))
+
         try:
             input_mols = [Chem.MolFromSmiles(smi) for smi in inputs]
         except Exception as e:
@@ -205,7 +210,7 @@ class Reaction:
         # Generate all combinations of input molecules
         combinations = self._generate_reactant_combinations(input_mols)
         for mol_combination in combinations:
-            products_sets = rxn.RunReactants(mol_combination)
+            products_sets = self.rxn.RunReactants(mol_combination)
             for products in products_sets:
                 output_combination = []
                 for product in products:
