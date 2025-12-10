@@ -1,4 +1,4 @@
-# DHMO (dɯ.mo)
+# DHMO (*/dɯ.mo/*)
 
 DHMO is a Python library inspired by the famous 'dihydrogen monoxide' chemistry joke. DHMO focuses on making chemical reaction modeling as human-readable and accessible as possible, providing a friendly wrapper for defining and simulating chemical reactions.
 
