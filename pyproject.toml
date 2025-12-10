@@ -1,0 +1,26 @@
+[project]
+name = "dhmo"
+version = "0.1.0"
+description = "A human-friendly wrapper for computational chemistry tools."
+authors = [
+    { name = "iwyoo" }
+]
+readme = "README.md"
+requires-python = ">=3.8"
+dependencies = [
+    "rdkit",
+    "pyyaml"
+]
+
+[project.urls]
+Homepage = "https://github.com/iwyoo/dhmo"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+package-dir = {"" = "src"}
