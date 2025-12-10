@@ -1,0 +1,16 @@
+name: Condensation
+description: "Condensation reaction between an alcohol and a carboxylic acid to form an ester and water"
+inputs:
+  alcohol:
+    - "*O"
+    - "1_"
+  acetic acid:
+    - "*(=O)O"
+    - "2_____"
+outputs:
+  ester:
+    - "*(=O)*"
+    - "1____2"
+  water:
+    - "O"
+    - "_"
