@@ -104,9 +104,21 @@ class Reaction:
             raise ValueError(f"Invalid SMARTS pattern: {pattern}")
 
         atom_pos_dict = parse_smarts_atoms(pattern)
-        # atom_pos_dict: {atom_idx: [positions in pattern string]}
-        # mapping: str, e.g. "1__2__"
-        # For each atom_idx, check the mapping at the first position
+
+        # Collect all used positions from atom_pos_dict
+        used_positions = set()
+        for pos_list in atom_pos_dict.values():
+            used_positions.update(pos_list)
+
+        # Check unused positions in mapping before atom mapping
+        for i, c in enumerate(mapping):
+            if i not in used_positions and c != '_':
+                raise ValueError(
+                    f"Mapping character at position {i} ('{c}') "
+                    "is not used for any atom and must be '_'."
+                )
+
+        # Now apply mapping
         for atom_idx, positions in atom_pos_dict.items():
             digit_chars = [mapping[pos] for pos in positions if mapping[pos].isdigit()]
             atom = mol.GetAtomWithIdx(atom_idx)
