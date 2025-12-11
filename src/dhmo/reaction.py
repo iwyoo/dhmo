@@ -1,5 +1,6 @@
 from itertools import product
 from typing import Any, Dict
+import copy
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -13,6 +14,7 @@ class Reaction:
         description: str = "",
         inputs: Dict[str, list],
         outputs: Dict[str, list],
+        is_reversed: bool = False,
         **kwargs: Any
     ) -> None:
         self.name = name
@@ -24,6 +26,7 @@ class Reaction:
             self.output_smarts_map,
         )
         self.rxn = AllChem.ReactionFromSmarts(self.rxn_smarts)
+        self.is_reversed = is_reversed
 
     def _preprocess_reaction_members(self, members: Dict[str, list]) -> Dict[str, str]:
         preprocessed_members = {}
@@ -51,7 +54,7 @@ class Reaction:
                 raise ValueError(
                     f"Pattern and mapping for member '{member}' must have the same length, got: pattern={repr(pattern)}, mapping={repr(mapping)}"
                 )
-            
+
             if not all((c == "_" or c.isdigit() and c != '0') for c in mapping):
                 raise ValueError(
                     f"Mapping for member '{member}' must contain only digits or underscores, got: {repr(mapping)}"
@@ -89,7 +92,7 @@ class Reaction:
         """
         Convert a SMILES pattern and atom mapping to a SMARTS string with atom mapping.
         For example, given the SMILES pattern "C(=O)O" and mapping "1__2__",
-        the function returns "[C:1](=[O:2])O". 
+        the function returns "[C:1](=[O:2])O".
 
         Args:
             pattern (str): SMARTS pattern (e.g., "C(=O)O")
@@ -100,7 +103,7 @@ class Reaction:
         mol = Chem.MolFromSmarts(pattern)
         if mol is None:
             raise ValueError(f"Invalid SMILES pattern: {pattern}")
-        
+
         pattern_lower = pattern.lower()
         atom_pos2index = {}
         i = 0
@@ -111,7 +114,7 @@ class Reaction:
                 raise ValueError(
                     f"Mapping does not match pattern for atom '{symbol}' in pattern '{pattern}' with mapping '{mapping}'"
                 )
-            
+
             if len(symbol) == 2 and pattern[index + 1] != "_":
                 raise ValueError(
                     f"Second character of atom symbol '{symbol}' in pattern '{pattern}' must be followed by an underscore in mapping"
@@ -125,7 +128,7 @@ class Reaction:
             raise ValueError(
                 f"More mapped atoms in mapping '{mapping}' than atoms in pattern '{pattern}'"
             )
-        
+
         for num, pos in map_num2pos.items():
             atom_idx = atom_pos2index.get(pos)
             if atom_idx is None:
@@ -148,54 +151,27 @@ class Reaction:
         """
         possible_mol_lists = []
         for input_smarts in self.input_smarts_map.values():
-            possible_input_smarts = []
+            possible_input_mols = []
             pattern_mol = Chem.MolFromSmarts(input_smarts)
             for mol in input_mols:
                 if mol.HasSubstructMatch(pattern_mol):
-                    possible_input_smarts.append(mol)
-            possible_mol_lists.append(possible_input_smarts)
+                    possible_input_mols.append(mol)
+            possible_mol_lists.append(possible_input_mols)
         combinations = list(product(*possible_mol_lists))
         return combinations
 
-    def run_ordered(self, inputs: list[str]):
+    def run(self, inputs: list[str], ordered: bool = False):
         """
         Run the reaction on the given input molecules.
-
         Args:
             inputs (list of str): Input molecule SMILES list.
+            ordered (bool): If True, use input order strictly. If False, try all combinations.
         Returns:
             list of str: Output molecule SMILES list.
         """
-        rxn = AllChem.ReactionFromSmarts(self.rxn_smarts)
-        try:
-            input_mols = [Chem.MolFromSmiles(smi) for smi in inputs]
-        except Exception as e:
-            raise ValueError(f"Error parsing input SMILES: {e}")
-
-        if any(mol is None for mol in input_mols):
-            raise ValueError("One or more input SMILES are invalid.")
-        products_sets = rxn.RunReactants(input_mols)
-        outputs = []
-        for products in products_sets:
-            output_combination = []
-            for product in products:
-                smi = Chem.MolToSmiles(product, isomericSmiles=True)
-                output_combination.append(smi)
-            outputs.append(".".join(output_combination))
-        return outputs
-
-    def run(self, inputs: list[str]):
-        """
-        Run the reaction on the given input molecules with all input combinations
-        Args:
-            inputs (list of str): Input molecule SMILES list.
-        Returns:
-            list of str: Output molecule SMILES list.
-        """
-        self.rxn.Initialize()
-
-        # Remove duplicate inputs
-        inputs = list(set(inputs))
+        if not ordered:
+            # Remove duplicate inputs for unordered mode
+            inputs = list(set(inputs))
 
         try:
             input_mols = [Chem.MolFromSmiles(smi) for smi in inputs]
@@ -204,17 +180,59 @@ class Reaction:
 
         if any(mol is None for mol in input_mols):
             raise ValueError("One or more input SMILES are invalid.")
-        
-        outputs = []
 
-        # Generate all combinations of input molecules
-        combinations = self._generate_reactant_combinations(input_mols)
+        outputs = []
+        if ordered:
+            # Only one combination: input order as given
+            combinations = [tuple(input_mols)]
+        else:
+            combinations = self._generate_reactant_combinations(input_mols)
+
         for mol_combination in combinations:
+            self.rxn.Initialize()
             products_sets = self.rxn.RunReactants(mol_combination)
             for products in products_sets:
                 output_combination = []
+                is_product_valid = True
                 for product in products:
+                    try:
+                        Chem.SanitizeMol(product)
+                    except Exception:
+                        is_product_valid = False
+                        break
                     smi = Chem.MolToSmiles(product, isomericSmiles=True)
                     output_combination.append(smi)
-                outputs.append(".".join(output_combination))
+                if is_product_valid:
+                    output_smiles = ".".join(output_combination)
+                    output_smiles = Chem.CanonSmiles(output_smiles)
+                    outputs.append(output_smiles)
+        outputs = list(set(outputs))
         return outputs
+
+    def reversed(self, name=None, description=None):
+        """
+        Create a new Reaction instance with inputs and outputs swapped (retrosynthesis).
+        Args:
+            name (str, optional): Name for the reversed reaction. If None, no name is set.
+            description (str, optional): Description for the reversed reaction. If None, no description is set.
+        Returns:
+            Reaction: New Reaction instance with reversed inputs/outputs.
+        """
+        if name is None:
+            name = f"Reversed reaction of: {self.name}"
+        if description is None:
+            description = f"Reversed reaction of: {self.description}"
+
+        new_rxn = Reaction.__new__(Reaction)
+
+        new_rxn.name = name
+        new_rxn.description = description
+        new_rxn.input_smarts_map = copy.deepcopy(self.output_smarts_map)
+        new_rxn.output_smarts_map = copy.deepcopy(self.input_smarts_map)
+        new_rxn.rxn_smarts = new_rxn._preprocess_smarts(
+            new_rxn.input_smarts_map,
+            new_rxn.output_smarts_map,
+        )
+        new_rxn.rxn = AllChem.ReactionFromSmarts(new_rxn.rxn_smarts)
+        new_rxn.is_reversed = not self.is_reversed
+        return new_rxn

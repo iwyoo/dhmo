@@ -12,17 +12,18 @@ def test_condensation_reaction():
     assert '>>' in rxn_smarts
     print(f"Generated reaction SMARTS: {rxn_smarts}")
 
-    input_smiles = ["CCO", "CC(=O)O"]
-    output_smiles = reaction.run(input_smiles)
-    print(f"Input SMILES list: {input_smiles}")
-    print(f"Output SMILES list: {output_smiles}")
-
-    # Reverse reaction test
+    # Test running the reaction (unordered)
     input_smiles = ["CC(=O)O", "CCO"]
     output_smiles = reaction.run(input_smiles)
-    print(f"Input SMILES list: {input_smiles}")
-    print(f"Output SMILES list: {output_smiles}")
+    if output_smiles != ['CCOC(C)=O.O']:
+        raise AssertionError(f"Unexpected products: {output_smiles}")
 
-    output_smiles = reaction.run_ordered(input_smiles)
+    output_smiles = reaction.run(input_smiles, ordered=True)
     if len(output_smiles) > 0:
         raise AssertionError("Expected no products for ordered reaction with given inputs.")
+
+    # Test reversed reaction
+    reversed_reaction = reaction.reversed()
+    output_smiles_list = reversed_reaction.run(["CCOC(C)=O.O"])
+    if output_smiles_list != ['CC(=O)O.CCO']:
+        raise AssertionError(f"Unexpected products from reversed reaction: {output_smiles_list}")
