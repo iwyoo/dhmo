@@ -1,5 +1,6 @@
 from itertools import product
 from typing import Any, Dict
+import copy
 
 from rdkit import Chem
 from rdkit.Chem import AllChem
@@ -13,6 +14,7 @@ class Reaction:
         description: str = "",
         inputs: Dict[str, list],
         outputs: Dict[str, list],
+        is_reversed: bool = False,
         **kwargs: Any
     ) -> None:
         self.name = name
@@ -24,6 +26,7 @@ class Reaction:
             self.output_smarts_map,
         )
         self.rxn = AllChem.ReactionFromSmarts(self.rxn_smarts)
+        self.is_reversed = is_reversed
 
     def _preprocess_reaction_members(self, members: Dict[str, list]) -> Dict[str, str]:
         preprocessed_members = {}
@@ -200,6 +203,36 @@ class Reaction:
                     smi = Chem.MolToSmiles(product, isomericSmiles=True)
                     output_combination.append(smi)
                 if is_product_valid:
-                    outputs.append(".".join(output_combination))
+                    output_smiles = ".".join(output_combination)
+                    output_smiles = Chem.CanonSmiles(output_smiles)
+                    outputs.append(output_smiles)
         outputs = list(set(outputs))
         return outputs
+
+    def reversed(self, name=None, description=None):
+        """
+        Create a new Reaction instance with inputs and outputs swapped (retrosynthesis).
+        Args:
+            name (str, optional): Name for the reversed reaction. If None, no name is set.
+            description (str, optional): Description for the reversed reaction. If None, no description is set.
+        Returns:
+            Reaction: New Reaction instance with reversed inputs/outputs.
+        """
+        if name is None:
+            name = f"Reversed reaction of: {self.name}"
+        if description is None:
+            description = f"Reversed reaction of: {self.description}"
+
+        new_rxn = Reaction.__new__(Reaction)
+
+        new_rxn.name = name
+        new_rxn.description = description
+        new_rxn.input_smarts_map = copy.deepcopy(self.output_smarts_map)
+        new_rxn.output_smarts_map = copy.deepcopy(self.input_smarts_map)
+        new_rxn.rxn_smarts = new_rxn._preprocess_smarts(
+            new_rxn.input_smarts_map,
+            new_rxn.output_smarts_map,
+        )
+        new_rxn.rxn = AllChem.ReactionFromSmarts(new_rxn.rxn_smarts)
+        new_rxn.is_reversed = not self.is_reversed
+        return new_rxn
