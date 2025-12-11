@@ -5,6 +5,8 @@ import copy
 from rdkit import Chem
 from rdkit.Chem import AllChem
 
+from .utils.parser import parse_smarts_atoms
+
 
 class Reaction:
     def __init__(
@@ -60,12 +62,11 @@ class Reaction:
                     f"Mapping for member '{member}' must contain only digits or underscores, got: {repr(mapping)}"
                 )
 
-            smarts = self._apply_atom_mapping_by_symbol(pattern, mapping)
+            smarts = self._apply_atom_mapping(pattern, mapping)
             preprocessed_members[member] = smarts
         return preprocessed_members
 
-    @staticmethod
-    def _preprocess_smarts(input_members: Dict[str, str], output_members: Dict[str, str]) -> str:
+    def _preprocess_smarts(self, input_members: Dict[str, str], output_members: Dict[str, str]) -> str:
         """
         Preprocess the reaction SMARTS string from input and output member SMARTS maps.
 
@@ -88,56 +89,47 @@ class Reaction:
         reaction_smarts = f"{input_smarts}>>{output_smarts}"
         return reaction_smarts
 
-    def _apply_atom_mapping_by_symbol(self, pattern: str, mapping: str) -> str:
+    def _apply_atom_mapping(self, pattern: str, mapping: str) -> str:
         """
-        Convert a SMILES pattern and atom mapping to a SMARTS string with atom mapping.
-        For example, given the SMILES pattern "C(=O)O" and mapping "1__2__",
-        the function returns "[C:1](=[O:2])O".
-
+        Apply atom mapping to a SMARTS string using a mapping string.
+        Uses parse_smarts_atoms to get atom index to SMARTS positions.
         Args:
             pattern (str): SMARTS pattern (e.g., "C(=O)O")
             mapping (str): Atom mapping string (e.g., "1__2__")
         Returns:
-            str: SMARTS string with atom mapping (e.g., "[C:1](=[O:2])O")
+            str: SMARTS string with atom mapping
         """
         mol = Chem.MolFromSmarts(pattern)
         if mol is None:
-            raise ValueError(f"Invalid SMILES pattern: {pattern}")
+            raise ValueError(f"Invalid SMARTS pattern: {pattern}")
 
-        pattern_lower = pattern.lower()
-        atom_pos2index = {}
-        i = 0
-        for atom_idx, atom in enumerate(mol.GetAtoms()):
-            symbol = atom.GetSymbol()
-            i = pattern_lower.find(symbol.lower(), i)
-            if i == -1 or i >= len(mapping):
+        atom_pos_dict = parse_smarts_atoms(pattern)
+
+        # Collect all used positions from atom_pos_dict
+        used_positions = set()
+        for pos_list in atom_pos_dict.values():
+            used_positions.update(pos_list)
+
+        # Check unused positions in mapping before atom mapping
+        for i, c in enumerate(mapping):
+            if i not in used_positions and c != '_':
                 raise ValueError(
-                    f"Mapping does not match pattern for atom '{symbol}' in pattern '{pattern}' with mapping '{mapping}'"
+                    f"Mapping character at position {i} ('{c}') "
+                    "is not used for any atom and must be '_'."
                 )
 
-            if len(symbol) == 2 and pattern[index + 1] != "_":
-                raise ValueError(
-                    f"Second character of atom symbol '{symbol}' in pattern '{pattern}' must be followed by an underscore in mapping"
-                )
-            atom_pos2index[i] = atom_idx
-            i += 1
-
-        map_num2pos = {num: pos for pos, num in enumerate(mapping) if num != "_"}
-
-        if len(map_num2pos) > len(atom_pos2index):
-            raise ValueError(
-                f"More mapped atoms in mapping '{mapping}' than atoms in pattern '{pattern}'"
-            )
-
-        for num, pos in map_num2pos.items():
-            atom_idx = atom_pos2index.get(pos)
-            if atom_idx is None:
-                raise ValueError(
-                    f"No atom found at position {pos} in pattern '{pattern}' for mapping '{mapping}'"
-                )
+        # Now apply mapping
+        for atom_idx, positions in atom_pos_dict.items():
+            digit_chars = [mapping[pos] for pos in positions if mapping[pos].isdigit()]
             atom = mol.GetAtomWithIdx(atom_idx)
-            atom.SetAtomMapNum(int(num))
-
+            if "0" in digit_chars:
+                raise ValueError(f"Mapping digit '0' is not allowed for atom index {atom_idx} in mapping string: {digit_chars}")
+            if len(digit_chars) > 1:
+                raise ValueError(f"Multiple mapping digits found for atom index {atom_idx} in mapping string: {digit_chars}")
+            elif len(digit_chars) == 1:
+                atom.SetAtomMapNum(int(digit_chars[0]))
+            else:
+                atom.SetAtomMapNum(0)
         smarts = Chem.MolToSmarts(mol)
         return smarts
 

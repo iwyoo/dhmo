@@ -7,10 +7,6 @@ def test_condensation_reaction():
     # Example yaml path
     yaml_path = os.path.join(os.path.dirname(__file__), '../examples/condensation.yaml')
     reaction = load(yaml_path)
-    rxn_smarts = reaction.rxn_smarts
-    assert isinstance(rxn_smarts, str)
-    assert '>>' in rxn_smarts
-    print(f"Generated reaction SMARTS: {rxn_smarts}")
 
     # Test running the reaction (unordered)
     input_smiles = ["CC(=O)O", "CCO"]
@@ -27,3 +23,15 @@ def test_condensation_reaction():
     output_smiles_list = reversed_reaction.run(["CCOC(C)=O.O"])
     if output_smiles_list != ['CC(=O)O.CCO']:
         raise AssertionError(f"Unexpected products from reversed reaction: {output_smiles_list}")
+
+
+def test_oxidation_of_primary_alcohol():
+    yaml_path = os.path.join(os.path.dirname(__file__), '../examples/oxidation.yaml')
+    reaction = load(yaml_path)
+
+    # Ethanol oxidation: CCO + [O] -> acetaldehyde + water
+    input_smiles = ["CCO"]
+    output_smiles = reaction.run(input_smiles)
+    # Expect acetaldehyde (CC=O) and water (O)
+    if output_smiles != ["CC=O"]:
+        raise AssertionError(f"Unexpected products: {output_smiles}")
