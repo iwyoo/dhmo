@@ -3,7 +3,7 @@ import pytest
 from src.dhmo import load
 
 
-def test_dehydration_reaction():
+def test_condensation_reaction():
     # Example yaml path
     yaml_path = os.path.join(os.path.dirname(__file__), '../examples/condensation.yaml')
     reaction = load(yaml_path)
