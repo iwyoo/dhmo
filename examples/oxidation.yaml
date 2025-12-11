@@ -1,0 +1,10 @@
+name: Oxidation of primary alcohol
+description: "Oxidation of a primary alcohol to an aldehyde using [O] as oxidant"
+inputs:
+  alcohol:
+    - "[CH2][OH]"
+    - "_1_____2_"  # It's okay to set digit on any position of the atom
+outputs:
+  aldehyde:
+    - "[CH]=[O]"
+    - "_1___2__"
