@@ -6,5 +6,5 @@ inputs:
     - "_1_____2_"  # It's okay to set digit on any position of the atom
 outputs:
   aldehyde:
-    - "[CH]=[O]"
-    - "_1___2__"
+    - "[CH]=[OH0]"
+    - "_1___2____"

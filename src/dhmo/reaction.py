@@ -169,9 +169,18 @@ class Reaction:
             input_mols = [Chem.MolFromSmiles(smi) for smi in inputs]
         except Exception as e:
             raise ValueError(f"Error parsing input SMILES: {e}")
-
         if any(mol is None for mol in input_mols):
             raise ValueError("One or more input SMILES are invalid.")
+
+        # Helper function to extract reactant map info for atom-mapping restoration
+        def get_reactants_for_maps(rxn):
+            res = {}
+            for i in range(rxn.GetNumReactantTemplates()):
+                r = rxn.GetReactantTemplate(i)
+                for at in r.GetAtoms():
+                    if at.GetAtomMapNum():
+                        res[at.GetAtomMapNum()] = i
+            return res
 
         outputs = []
         if ordered:
@@ -183,6 +192,7 @@ class Reaction:
         for mol_combination in combinations:
             self.rxn.Initialize()
             products_sets = self.rxn.RunReactants(mol_combination)
+            rnos = get_reactants_for_maps(self.rxn)
             for products in products_sets:
                 output_combination = []
                 is_product_valid = True
@@ -192,13 +202,29 @@ class Reaction:
                     except Exception:
                         is_product_valid = False
                         break
+
+                    # Assign atom-mapping based on reactants
+                    # using old_mapno to reactant index mapping
+                    for product_atom in product.GetAtoms():
+                        if product_atom.HasProp("old_mapno"):
+                            mapno = int(product_atom.GetProp("old_mapno"))
+                        else:
+                            continue
+
+                        reactant_mol = mol_combination[rnos[mapno]]
+                        reactant_atom = reactant_mol.GetAtomWithIdx(
+                            product_atom.GetIntProp("react_atom_idx"),
+                        )
+                        reactant_atom_map_num = reactant_atom.GetAtomMapNum()
+                        product_atom.SetAtomMapNum(reactant_atom_map_num)
+
                     smi = Chem.MolToSmiles(product, isomericSmiles=True)
                     output_combination.append(smi)
                 if is_product_valid:
                     output_smiles = ".".join(output_combination)
                     output_smiles = Chem.CanonSmiles(output_smiles)
                     outputs.append(output_smiles)
-        outputs = list(set(outputs))
+        outputs = sorted(set(outputs))
         return outputs
 
     def reversed(self, name=None, description=None):
